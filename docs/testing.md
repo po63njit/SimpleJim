@@ -8,12 +8,12 @@
 | `:app:assembleDebug` | Build host | App compile, resource linking, dexing, and APK package. | Built successfully. Not a phone run. |
 | `:app:assembleDebugAndroidTest` | Build host | Compiles and packages three Room migration/transaction cases and one Compose workout smoke case. | Built successfully; instrumentation not executed on this build host. |
 | `:app:connectedDebugAndroidTest` | Dedicated device/emulator | Actual Room schema creation/upgrade, rollback, stale writes/reset, and UI copy/edit/save/Activity relaunch. | Not run here. A test device/emulator is needed. |
-| Synthetic package, v1→v2 | Android phone | In-place migration and hands-on storage checks after restart, without opening the normal app’s database. | A tester reported the separate fixture passed. This is not a result for personal data or a device run of the source-only flair below. |
+| Synthetic package, v1→v2 | Android phone | In-place migration and hands-on storage checks after restart, without opening the normal app’s database. | A tester reported the separate fixture passed. This is not a result for personal data or a device run of the 1.1.1 changes below. |
 | Earlier normal APK | Android phone | Basic launch/logging. | A tester confirmed it worked. Do not infer broad compatibility, new UI checks, or migration on personal history. |
 
 The optional v2 test APK includes one Compose smoke test that adds a synthetic workout, verifies one matching Room session and cleared draft, and checks History after a new Activity launches. Activity relaunch is not an operating system process restart. Use the separate force-stop procedure to establish that distinction.
 
-The source includes a chalk-and-tape visual accent on top of the 1.1 changes. The earlier 1.1 APK distributed for testing predates that accent; the same version number does not mean the same source snapshot. The visual accent’s native phone appearance has not been verified for this source here.
+The 1.1 debug build introduced draft recovery and retained the Track/History redesign. The 1.1.1 debug build adds the chalk-and-tape **LIFT LOG** styling and asks before replacing a draft with input; the earlier 1.1 build has neither change. The 1.1.1 app and test APKs built and its JVM tests passed. This does not establish an on-phone result for the styling or confirmation dialog.
 
 ## Isolated fixture
 

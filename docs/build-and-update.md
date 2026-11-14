@@ -35,7 +35,7 @@ On Windows, use `gradlew.bat`. The app APK is `app/build/outputs/apk/debug/app-d
 
 ## Safe in-place update
 
-The normal app is labeled **SimpleJim**, package `com.simplejim.tracker`. Version 1.1 uses app version code 2 and migrates the local database from version 1 to 2 when opened. App version codes and the Room schema version are separate concepts.
+The normal app is labeled **SimpleJim**, package `com.simplejim.tracker`. The current debug build is 1.1.1 (app version code 3). Version 1.1 (app version code 2) introduced the local Room migration from schema 1 to 2; 1.1.1 uses the same schema 2 and the same migration path for older installations. App version codes and Room schema versions are separate.
 
 - Verify a new APK comes from the expected build and is signed with the **same key** as the installed app. A locally built debug APK normally uses that development environment's debug key; it is not necessarily the same as another build's. If Android reports an incompatible signature or the installer does not offer an in-place **Update**, stop. **Do not uninstall or clear app storage.** Ask for the matching build or use a disposable test device.
 - Rehearse v1 → v2 on synthetic history first. See the [migration protocol](android-smoke.md#test-the-in-place-history-migration-before-upgrading-personal-data) and [data invariants](architecture-and-data.md#database-migration-1--2).
