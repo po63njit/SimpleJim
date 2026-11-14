@@ -1,0 +1,45 @@
+name: One-time stock Android runner probe
+
+on:
+  pull_request:
+    types: [opened]
+    branches: [main]
+    paths:
+      - '.github/workflows/android-stock-kvm-probe.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  stock-kvm:
+    name: Stock KVM access only
+    if: ${{ github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'work/simplejim-stock-kvm-probe' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Check the existing stock KVM device and SDK emulator
+        shell: bash
+        run: |
+          set -euo pipefail
+          device=absent-or-not-character
+          readable=no
+          writable=no
+          [[ ! -c /dev/kvm ]] || device=character
+          [[ ! -r /dev/kvm ]] || readable=yes
+          [[ ! -w /dev/kvm ]] || writable=yes
+          printf 'KVM device: %s; readable: %s; writable: %s\n' "$device" "$readable" "$writable"
+
+          emulator="${ANDROID_HOME:-/no-android-sdk}/emulator/emulator"
+          accel=not-installed
+          if [[ -x "$emulator" ]]; then
+            printf '%s\n' 'Existing Android SDK emulator: present'
+            if accel_output=$(timeout 30s "$emulator" -accel-check 2>&1); then
+              printf '%s\n' "$accel_output"
+              accel=command-succeeded
+            else
+              printf '%s\n' "$accel_output"
+              accel=command-failed-or-timed-out
+            fi
+          fi
+          printf 'SDK emulator acceleration check: %s\n' "$accel"
+          [[ "$device" == character && "$readable" == yes && "$writable" == yes && "$accel" == command-succeeded ]]
