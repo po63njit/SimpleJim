@@ -1,0 +1,41 @@
+name: Android verification
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/android-verification.yml'
+      - 'app/**'
+      - 'gradle/**'
+      - '*.gradle.kts'
+      - 'gradle.properties'
+      - 'gradlew'
+      - 'gradlew.bat'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-verification-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unit-and-package:
+    name: Unit tests and APK compilation
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Validate the pinned Android toolchain and compile
+        shell: bash
+        run: |
+          set -euo pipefail
+          export JAVA_HOME="$JAVA_HOME_17_X64"
+          export PATH="$JAVA_HOME/bin:$PATH"
+          test -r "$ANDROID_HOME/platforms/android-34/android.jar"
+          test -x "$ANDROID_HOME/build-tools/34.0.0/aapt2"
+          java -version
+          ./gradlew --no-daemon :app:testDebugUnitTest :app:assembleDebug :app:assembleDebugAndroidTest
