@@ -8,10 +8,12 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.simplejim.tracker.data.DraftRevisionConflict
 import com.simplejim.tracker.data.WorkoutExercise
 import com.simplejim.tracker.data.WorkoutRepository
 import com.simplejim.tracker.data.WorkoutSession
-import com.simplejim.tracker.data.WorkoutSet
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
 
 private val DEFAULT_PRESET_EXERCISES = listOf(
@@ -27,16 +29,10 @@ enum class SimpleJimTab {
     History,
 }
 
-data class DraftSet(
-    val weight: String = "",
-    val reps: String = "",
-)
-
-data class DraftExercise(
-    val id: Long,
-    val name: String = "",
-    val sets: List<DraftSet> = listOf(DraftSet()),
-)
+enum class DraftReplacementAction {
+    Reset,
+    Repeat,
+}
 
 data class SimpleJimUiState(
     val selectedTab: SimpleJimTab = SimpleJimTab.Track,
@@ -45,12 +41,27 @@ data class SimpleJimUiState(
     val history: List<WorkoutSession> = emptyList(),
     val validationMessage: String? = null,
     val lastSavedAt: Long? = null,
+    val draftReady: Boolean = false,
+    val draftBusy: Boolean = true,
+    val pendingDraftWrites: Int = 0,
+    val draftStorageError: String? = null,
+    val canDiscardUnreadableDraft: Boolean = false,
+    val pendingDraftReplacement: DraftReplacementAction? = null,
     val quickPresets: List<String> = DEFAULT_PRESET_EXERCISES,
 )
 
 class SimpleJimViewModel(application: Application) : AndroidViewModel(application) {
     private var idCounter = 1L
     private val repository = WorkoutRepository(application)
+    private var draftRevision: Long? = null
+    private val draftCommands = Channel<DraftCommand>(Channel.UNLIMITED)
+
+    private sealed interface DraftCommand {
+        data object Restore : DraftCommand
+        data class Persist(val draft: WorkoutDraft) : DraftCommand
+        data object Reset : DraftCommand
+        data class Save(val workout: WorkoutSession) : DraftCommand
+    }
 
     var uiState by mutableStateOf(
         SimpleJimUiState(
@@ -61,7 +72,102 @@ class SimpleJimViewModel(application: Application) : AndroidViewModel(applicatio
 
     init {
         viewModelScope.launch {
-            uiState = uiState.copy(history = repository.loadWorkouts())
+            for (command in draftCommands) {
+                try {
+                    when (command) {
+                        DraftCommand.Restore -> restoreDraft()
+                        is DraftCommand.Persist -> {
+                            draftRevision = repository.writeDraft(
+                                requireNotNull(draftRevision),
+                                WorkoutDraftJson.encode(command.draft),
+                            )
+                            uiState = uiState.copy(draftStorageError = null)
+                        }
+                        DraftCommand.Reset -> {
+                            draftRevision = repository.writeDraft(requireNotNull(draftRevision), null)
+                            uiState = uiState.copy(
+                                draftReady = true,
+                                draftBusy = false,
+                                draftStorageError = null,
+                                canDiscardUnreadableDraft = false,
+                                draftNotes = "",
+                                draftExercises = listOf(newDraftExercise()),
+                                validationMessage = null,
+                            )
+                        }
+                        is DraftCommand.Save -> {
+                            draftRevision = repository.commitWorkout(command.workout, requireNotNull(draftRevision))
+                            uiState = uiState.copy(
+                                draftBusy = false,
+                                draftStorageError = null,
+                                selectedTab = SimpleJimTab.History,
+                                draftNotes = "",
+                                draftExercises = listOf(newDraftExercise()),
+                                history = (listOf(command.workout) + uiState.history).sortedByDescending { it.performedAt },
+                                validationMessage = null,
+                                lastSavedAt = command.workout.performedAt,
+                            )
+                        }
+                    }
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (error: Exception) {
+                    // A pending save/reset owns the busy flag even when an earlier draft edit fails.
+                    val failedPersist = command is DraftCommand.Persist
+                    uiState = uiState.copy(
+                        draftBusy = if (failedPersist) uiState.draftBusy else false,
+                        draftStorageError = if (error is DraftRevisionConflict) {
+                            "Another editor changed this draft. These edits were not stored."
+                        } else when (command) {
+                            DraftCommand.Restore -> "Could not load the draft. Nothing was overwritten."
+                            DraftCommand.Reset -> "Could not clear the draft. No workout history was changed."
+                            is DraftCommand.Save -> "Could not save this workout. Your draft is still here."
+                            is DraftCommand.Persist -> "Could not store this draft yet. Keep the app open and retry."
+                        },
+                    )
+                } finally {
+                    if (command is DraftCommand.Persist) {
+                        uiState = uiState.copy(pendingDraftWrites = uiState.pendingDraftWrites - 1)
+                    }
+                }
+            }
+        }
+        draftCommands.trySend(DraftCommand.Restore)
+    }
+
+    private suspend fun restoreDraft() {
+        val history = repository.loadWorkouts()
+        uiState = uiState.copy(history = history)
+        val stored = repository.readDraft()
+        draftRevision = stored.revision
+        val draft = try {
+            stored.payloadJson?.let(WorkoutDraftJson::decode)
+        } catch (_: Exception) {
+            uiState = uiState.copy(
+                draftBusy = false,
+                draftStorageError = "This draft could not be read. It has not been overwritten.",
+                canDiscardUnreadableDraft = true,
+            )
+            return
+        }
+        if (draft != null) idCounter = draft.exercises.maxOf { it.id } + 1
+        uiState = uiState.copy(
+            draftReady = true,
+            draftBusy = false,
+            draftStorageError = null,
+            canDiscardUnreadableDraft = false,
+            draftNotes = draft?.notes.orEmpty(),
+            draftExercises = draft?.exercises ?: listOf(newDraftExercise()),
+        )
+    }
+
+    fun retryDraftStorage() {
+        if (uiState.draftBusy) return
+        if (uiState.draftReady) {
+            persistDraft(currentDraft())
+        } else {
+            uiState = uiState.copy(draftBusy = true, draftStorageError = null)
+            draftCommands.trySend(DraftCommand.Restore)
         }
     }
 
@@ -70,32 +176,22 @@ class SimpleJimViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     fun updateNotes(notes: String) {
-        uiState = uiState.copy(
-            draftNotes = notes,
-            validationMessage = null,
-        )
+        editDraft { copy(draftNotes = notes) }
     }
 
     fun addExercise() {
-        uiState = uiState.copy(
-            draftExercises = uiState.draftExercises + newDraftExercise(),
-            validationMessage = null,
-        )
+        editDraft { copy(draftExercises = draftExercises + newDraftExercise()) }
     }
 
     fun addPresetExercise(name: String) {
-        uiState = uiState.copy(
-            draftExercises = uiState.draftExercises + newDraftExercise(name = name),
-            validationMessage = null,
-        )
+        editDraft { copy(draftExercises = draftExercises + newDraftExercise(name = name)) }
     }
 
     fun removeExercise(exerciseId: Long) {
-        val updatedExercises = uiState.draftExercises.filterNot { it.id == exerciseId }
-        uiState = uiState.copy(
-            draftExercises = if (updatedExercises.isEmpty()) listOf(newDraftExercise()) else updatedExercises,
-            validationMessage = null,
-        )
+        editDraft {
+            val remaining = draftExercises.filterNot { it.id == exerciseId }
+            copy(draftExercises = remaining.ifEmpty { listOf(newDraftExercise()) })
+        }
     }
 
     fun updateExerciseName(exerciseId: Long, name: String) {
@@ -107,6 +203,12 @@ class SimpleJimViewModel(application: Application) : AndroidViewModel(applicatio
     fun addSet(exerciseId: Long) {
         updateExercise(exerciseId) { exercise ->
             exercise.copy(sets = exercise.sets + DraftSet())
+        }
+    }
+
+    fun copyLastSet(exerciseId: Long) {
+        updateExercise(exerciseId) { exercise ->
+            exercise.copy(sets = exercise.sets.withCopiedLastSet())
         }
     }
 
@@ -145,15 +247,49 @@ class SimpleJimViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
-    fun resetDraft() {
-        uiState = uiState.copy(
-            draftNotes = "",
-            draftExercises = listOf(newDraftExercise()),
-            validationMessage = null,
-        )
+    fun requestDraftReset() = requestDraftReplacement(DraftReplacementAction.Reset)
+
+    fun requestRepeatLastWorkout() = requestDraftReplacement(DraftReplacementAction.Repeat)
+
+    fun cancelDraftReplacement() {
+        uiState = uiState.copy(pendingDraftReplacement = null)
     }
 
-    fun repeatLastWorkout() {
+    fun confirmDraftReplacement() {
+        val action = uiState.pendingDraftReplacement ?: return
+        uiState = uiState.copy(pendingDraftReplacement = null)
+        if (canReplaceDraft(action)) performDraftReplacement(action)
+    }
+
+    private fun requestDraftReplacement(action: DraftReplacementAction) {
+        if (uiState.pendingDraftReplacement != null || !canReplaceDraft(action)) return
+        // An unreadable payload could contain meaningful input; never discard it silently.
+        if (uiState.canDiscardUnreadableDraft || currentDraft().hasMeaningfulInput()) {
+            uiState = uiState.copy(pendingDraftReplacement = action)
+        } else {
+            performDraftReplacement(action)
+        }
+    }
+
+    private fun canReplaceDraft(action: DraftReplacementAction): Boolean {
+        if (uiState.draftBusy) return false
+        return when (action) {
+            DraftReplacementAction.Reset -> uiState.draftReady || uiState.canDiscardUnreadableDraft
+            DraftReplacementAction.Repeat -> uiState.draftReady && uiState.history.isNotEmpty()
+        }
+    }
+
+    private fun performDraftReplacement(action: DraftReplacementAction) {
+        when (action) {
+            DraftReplacementAction.Reset -> {
+                uiState = uiState.copy(draftBusy = true, draftStorageError = null)
+                draftCommands.trySend(DraftCommand.Reset)
+            }
+            DraftReplacementAction.Repeat -> repeatLastWorkout()
+        }
+    }
+
+    private fun repeatLastWorkout() {
         val lastSession = uiState.history.firstOrNull() ?: return
         val repeatedExercises = lastSession.exercises.map { exercise ->
             DraftExercise(
@@ -167,26 +303,20 @@ class SimpleJimViewModel(application: Application) : AndroidViewModel(applicatio
                 },
             )
         }
-        uiState = uiState.copy(
-            selectedTab = SimpleJimTab.Track,
-            draftNotes = "",
-            draftExercises = if (repeatedExercises.isEmpty()) listOf(newDraftExercise()) else repeatedExercises,
-            validationMessage = null,
-        )
+        editDraft {
+            copy(
+                selectedTab = SimpleJimTab.Track,
+                draftNotes = "",
+                draftExercises = repeatedExercises.ifEmpty { listOf(newDraftExercise()) },
+            )
+        }
     }
 
     fun saveWorkout() {
+        if (!uiState.draftReady || uiState.draftBusy || uiState.pendingDraftReplacement != null) return
         val cleanedExercises = uiState.draftExercises.mapNotNull { draftExercise ->
             val name = draftExercise.name.trim()
-            val sets = draftExercise.sets.mapNotNull { draftSet ->
-                val weight = draftSet.weight.toDoubleOrNull()
-                val reps = draftSet.reps.toIntOrNull()
-                if (weight != null && reps != null && reps > 0 && weight >= 0) {
-                    WorkoutSet(weight = weight, reps = reps)
-                } else {
-                    null
-                }
-            }
+            val sets = draftExercise.sets.mapNotNull(DraftSet::toWorkoutSetOrNull)
 
             if (name.isNotEmpty() && sets.isNotEmpty()) {
                 WorkoutExercise(name = name, sets = sets)
@@ -202,39 +332,39 @@ class SimpleJimViewModel(application: Application) : AndroidViewModel(applicatio
             return
         }
 
+        val timestamp = System.currentTimeMillis()
         val session = WorkoutSession(
-            id = System.currentTimeMillis(),
-            performedAt = System.currentTimeMillis(),
+            id = timestamp,
+            performedAt = timestamp,
             notes = uiState.draftNotes.trim(),
             exercises = cleanedExercises,
         )
-        val updatedHistory = listOf(session) + uiState.history
-
-        uiState = uiState.copy(
-            selectedTab = SimpleJimTab.History,
-            draftNotes = "",
-            draftExercises = listOf(newDraftExercise()),
-            history = updatedHistory.sortedByDescending { it.performedAt },
-            validationMessage = null,
-            lastSavedAt = session.performedAt,
-        )
-        viewModelScope.launch {
-            repository.saveWorkout(session)
-        }
+        uiState = uiState.copy(draftBusy = true, draftStorageError = null, validationMessage = null)
+        draftCommands.trySend(DraftCommand.Save(session))
     }
 
     private fun updateExercise(exerciseId: Long, transform: (DraftExercise) -> DraftExercise) {
-        uiState = uiState.copy(
-            draftExercises = uiState.draftExercises.map { exercise ->
-                if (exercise.id == exerciseId) {
-                    transform(exercise)
-                } else {
-                    exercise
-                }
-            },
-            validationMessage = null,
-        )
+        editDraft {
+            copy(draftExercises = draftExercises.map { exercise ->
+                if (exercise.id == exerciseId) transform(exercise) else exercise
+            })
+        }
     }
+
+    private fun editDraft(update: SimpleJimUiState.() -> SimpleJimUiState) {
+        if (!uiState.draftReady || uiState.draftBusy || uiState.pendingDraftReplacement != null) return
+        val previous = currentDraft()
+        uiState = uiState.update().copy(validationMessage = null)
+        val next = currentDraft()
+        if (next != previous) persistDraft(next)
+    }
+
+    private fun persistDraft(draft: WorkoutDraft) {
+        uiState = uiState.copy(pendingDraftWrites = uiState.pendingDraftWrites + 1)
+        draftCommands.trySend(DraftCommand.Persist(draft))
+    }
+
+    private fun currentDraft() = WorkoutDraft(uiState.draftNotes, uiState.draftExercises)
 
     private fun newDraftExercise(name: String = ""): DraftExercise {
         return DraftExercise(id = nextId(), name = name)

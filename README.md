@@ -1,29 +1,34 @@
 # SimpleJim
 
-SimpleJim is a bare-bones Android gym tracker aimed at fast workout logging on a phone.
+SimpleJim is a simple Android gym log. Enter a lift, weight and reps, copy a set when you repeat it, then save the workout to your history. No account is required.
 
-## What is in this first version
+## What works today
 
-- Kotlin + Jetpack Compose Android app
-- Simple workout logger with exercises, sets, weight, reps, and optional notes
-- Local offline persistence with Room (`SQLite`)
-- Session history screen with exercise breakdown and rough training volume
-- Quick-add preset lifts and one-tap repeat of your last workout
-- Lightweight visual style that works well on a Google Pixel-sized device
+- **Track:** quick-add common lifts, name custom exercises, log sets in pounds, and optionally add workout notes.
+- **Copy or repeat:** copy the immediately preceding set if it is complete, or bring the previous workout into a new editable draft.
+- **Resume:** edits autosave locally as a draft, including unfinished sets. A draft does not count as a completed workout.
+- **Finish:** tap **Save Workout** to add the session to **History**. **Start Fresh** clears only the current draft.
+- **History:** review completed sessions and their exercise/set breakdown. There is no aggregate training-volume calculation yet.
 
-## Project structure
+Cardio, PR and estimated 1RM charts, bodyweight ratios, and benchmarks are planned, not implemented. See the [roadmap](docs/roadmap.md).
 
-- `app/` contains the Android application module
-- `app/src/main/java/com/simplejim/tracker/` contains the activity, view model, UI, and persistence code
-- `app/src/main/res/` contains the manifest resources and app theme
+## Get started
 
-## Opening the project
+Open this repository root in Android Studio with JDK 17 and Android SDK 34. The pinned Gradle wrapper is at the root. The app requires Android 8.0 (API 26) or newer.
 
-1. Open this workspace root in Android Studio.
-2. Use JDK 17 for the project.
-3. Let Android Studio sync the Gradle files and run the `app` configuration on your Pixel.
+```sh
+./gradlew :app:testDebugUnitTest :app:assembleDebug
+```
 
-## Notes
+The resulting debug APK is `app/build/outputs/apk/debug/app-debug.apk`. **If upgrading an existing installation, install over it with the same signing key; do not uninstall or clear data to bypass a signing mismatch.** See [build and update](docs/build-and-update.md) for the full install and migration checklist. This repository documents source and debug builds, not a Play Store release.
 
-- A Gradle wrapper is checked in, so use `./gradlew` for consistent local builds.
-- Weight is currently labeled in pounds to match a typical US gym setup.
+## Documentation
+
+- [Documentation index](docs/README.md)
+- [Log a workout and recover a draft](docs/workout-guide.md)
+- [Build, install and upgrade](docs/build-and-update.md)
+- [Architecture and data](docs/architecture-and-data.md)
+- [Testing and migration fixtures](docs/testing.md)
+- [Roadmap](docs/roadmap.md)
+
+SimpleJim does not send workouts to a SimpleJim service. Workouts and drafts are stored in local Room/SQLite. Android's own backup or device transfer may apply depending on device settings; see [data and privacy](docs/architecture-and-data.md#data-and-privacy).
