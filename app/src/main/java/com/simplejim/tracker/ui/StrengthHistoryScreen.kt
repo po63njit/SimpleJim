@@ -30,6 +30,7 @@ import com.simplejim.tracker.strength.StrengthSessionRow
 import com.simplejim.tracker.strength.estimateLabel
 import com.simplejim.tracker.strength.exerciseDisplayName
 import com.simplejim.tracker.strength.sourceSetLabel
+import com.simplejim.tracker.strength.strengthChart
 import com.simplejim.tracker.strength.strengthDateTime
 import com.simplejim.tracker.strength.strengthSessionRows
 
@@ -99,6 +100,7 @@ internal fun StrengthHistoryScreen(
                         }
                     }
                 }
+                item { StrengthChartPanel(strengthChart(selected)) }
                 items(strengthSessionRows(selected, newestFirst), key = { "${it.point.sessionId}:${it.point.performedAt}" }) { row ->
                     StrengthSessionItem(row)
                 }
