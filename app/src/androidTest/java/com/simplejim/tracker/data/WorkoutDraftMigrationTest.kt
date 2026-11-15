@@ -21,7 +21,7 @@ class WorkoutDraftMigrationTest {
     private val context = InstrumentationRegistry.getInstrumentation().targetContext
 
     @Test
-    fun migrationPreservesV1HistoryAndStoresIncompleteDraftAcrossOpen() = runBlocking<Unit> {
+    fun migrationChainPreservesV1HistoryAndStoresIncompleteDraftAcrossOpen() = runBlocking<Unit> {
         val name = "room-draft-migration-" + UUID.randomUUID()
         val path = context.getDatabasePath(name)
         path.parentFile?.mkdirs()
@@ -101,6 +101,6 @@ class WorkoutDraftMigrationTest {
         }
 
     private fun open(name: String) = Room.databaseBuilder(context, WorkoutDatabase::class.java, name)
-        .addMigrations(WorkoutDatabase.MIGRATION_1_2)
+        .addMigrations(WorkoutDatabase.MIGRATION_1_2, WorkoutDatabase.MIGRATION_2_3)
         .build()
 }

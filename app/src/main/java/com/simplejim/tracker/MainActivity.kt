@@ -5,6 +5,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import com.simplejim.tracker.cardio.CardioViewModel
 import com.simplejim.tracker.ui.SimpleJimApp
 import com.simplejim.tracker.ui.theme.SimpleJimTheme
 
@@ -13,13 +14,15 @@ class MainActivity : ComponentActivity() {
         SimpleJimViewModel.factory(application)
     }
 
+    private val cardioViewModel: CardioViewModel by viewModels()
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
         setContent {
             SimpleJimTheme {
-                SimpleJimApp(viewModel = viewModel)
+                SimpleJimApp(viewModel = viewModel, cardioViewModel = cardioViewModel)
             }
         }
     }
