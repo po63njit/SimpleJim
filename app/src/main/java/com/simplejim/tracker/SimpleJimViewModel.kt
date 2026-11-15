@@ -27,6 +27,7 @@ private val DEFAULT_PRESET_EXERCISES = listOf(
 enum class SimpleJimTab {
     Track,
     History,
+    Cardio,
 }
 
 enum class DraftReplacementAction {

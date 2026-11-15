@@ -59,6 +59,7 @@ import com.simplejim.tracker.SimpleJimTab
 import com.simplejim.tracker.SimpleJimUiState
 import com.simplejim.tracker.SimpleJimViewModel
 import com.simplejim.tracker.toWorkoutSetOrNull
+import com.simplejim.tracker.cardio.CardioViewModel
 import com.simplejim.tracker.data.WorkoutExercise
 import com.simplejim.tracker.data.WorkoutSession
 import java.text.SimpleDateFormat
@@ -66,7 +67,7 @@ import java.util.Date
 import java.util.Locale
 
 @Composable
-fun SimpleJimApp(viewModel: SimpleJimViewModel) {
+internal fun SimpleJimApp(viewModel: SimpleJimViewModel, cardioViewModel: CardioViewModel) {
     val state = viewModel.uiState
     val keyboardVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
 
@@ -135,6 +136,8 @@ fun SimpleJimApp(viewModel: SimpleJimViewModel) {
                     onRetryDraftStorage = viewModel::retryDraftStorage,
                     onRepeatLastWorkout = viewModel::requestRepeatLastWorkout,
                 )
+
+                SimpleJimTab.Cardio -> CardioScreen(Modifier.weight(1f), cardioViewModel)
 
                 SimpleJimTab.History -> HistoryScreen(
                     modifier = Modifier.weight(1f),
