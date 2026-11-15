@@ -1,5 +1,6 @@
 package com.simplejim.tracker.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -68,6 +69,10 @@ import java.util.Locale
 @Composable
 fun SimpleJimApp(viewModel: SimpleJimViewModel) {
     val state = viewModel.uiState
+    val strength = viewModel.strengthHistory
+    BackHandler(enabled = state.selectedTab == SimpleJimTab.History && strength.isOpen) {
+        viewModel.goBackFromStrengthHistory()
+    }
     val keyboardVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
 
     state.pendingDraftReplacement?.let { action ->
@@ -136,11 +141,22 @@ fun SimpleJimApp(viewModel: SimpleJimViewModel) {
                     onRepeatLastWorkout = viewModel::requestRepeatLastWorkout,
                 )
 
-                SimpleJimTab.History -> HistoryScreen(
-                    modifier = Modifier.weight(1f),
-                    history = state.history,
-                    lastSavedAt = state.lastSavedAt,
-                )
+                SimpleJimTab.History -> if (strength.isOpen) {
+                    StrengthHistoryScreen(
+                        modifier = Modifier.weight(1f),
+                        state = strength,
+                        onSelectExercise = viewModel::selectStrengthExercise,
+                        onRetry = viewModel::reloadStrengthHistory,
+                        onBack = viewModel::goBackFromStrengthHistory,
+                    )
+                } else {
+                    HistoryScreen(
+                        modifier = Modifier.weight(1f),
+                        history = state.history,
+                        lastSavedAt = state.lastSavedAt,
+                        onStrengthHistory = viewModel::openStrengthHistory,
+                    )
+                }
             }
             if (state.selectedTab == SimpleJimTab.Track && state.draftReady && !keyboardVisible) {
                 SaveBar(onSaveWorkout = viewModel::saveWorkout, enabled = !state.draftBusy)
@@ -524,12 +540,18 @@ private fun HistoryScreen(
     modifier: Modifier,
     history: List<WorkoutSession>,
     lastSavedAt: Long?,
+    onStrengthHistory: () -> Unit,
 ) {
     LazyColumn(
         modifier = modifier.fillMaxWidth(),
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
+        item {
+            OutlinedButton(onClick = onStrengthHistory, modifier = Modifier.fillMaxWidth()) {
+                Text("Strength history")
+            }
+        }
         if (history.isEmpty()) {
             item {
                 StatusCard(

@@ -1,6 +1,6 @@
 # Strength history calculations
 
-This is a calculation-layer prototype. It does not add a screen, persist a new metric, change the Room schema, add bodyweight, or update existing data. Completed workouts still supply the raw observations; drafts and repeated-but-unsaved workouts must not enter strength history.
+This slice adds a read-only view at **History → Strength history → exercise**. It queries the completed strength rows, not the current draft. It does not persist new metrics, change the Room schema, add bodyweight, or update existing data. A workout repeated into Track does not appear until it is saved.
 
 ## Three separate measures
 
@@ -20,8 +20,16 @@ The provisional prototype uses only the Epley-style formula `estimated load = en
 - Accept valid zero external load as a logged set, but never manufacture an estimate from it. Reject negative or nonfinite load, nonpositive reps, blank name, invalid session/date, and estimates that cannot be represented as a finite positive value. The legacy adapter also skips malformed JSON and missing or nonnumeric weight/reps instead of defaulting missing weight to zero. It does not rewrite or delete those records.
 - Sort by the original stored session time (epoch milliseconds), oldest first, with session ID as the deterministic tie-breaker. Retain separate sessions on the same day. Equal strength values retain the first observation in that stable sequence.
 
-## Integration plan
+## Using the read-only view
 
-1. Read the completed Room rows and feed the strict adapter the saved strength JSON, rather than reusing the ordinary display decoder’s fallback values. Keep the calculation pure and operate only on completed strength data, not cardio or drafts.
-2. Add a read-only exercise detail view. Show heaviest logged load in the original unit, a distinct marker for actual singles, and a separate estimated series with gaps for non-qualifying sessions, never zero or interpolated points. Label each estimate and attach its original saved exercise, load, unit, rep count and session date. Add chronological and empty-state UI tests before showing it to others.
+Choose an exercise to see the heaviest saved set and single, followed by a session trend with each estimate and its original source. The list starts newest first and can switch to oldest first; its underlying calculation remains chronological. The view uses headings, ordinary buttons, and a text trend rather than a chart, so the figures do not rely on color or gestures. A session without an estimate says **no qualifying set**; it does not display a fabricated zero. The source line includes the entered load, unit and rep count plus the original session date and local time formatted in the device’s locale and time zone. A chronological session number also distinguishes entries with the same displayed time.
+
+Unreadable or incomplete sets are omitted from this view without changing the database. If all saved strength data is missing or unreadable, the view explains why nothing is shown. A storage error has a retry, which only reloads completed rows. If a workout save is in progress, the view waits for it before showing a new snapshot and retains the selected exercise when it can. Return to workout history via the Back button, or select Track to leave Strength history.
+
+The calculator and text formatting are covered by JVM tests. The synthetic repository test and two Compose UI tests compile, but this branch has not run them on an Android device or emulator. A normal APK or update was not built for distribution.
+
+## Follow-on integration plan
+
+1. Verify the current text-based view on the smallest supported phone with large text, screen reader and Android Back. Exercise loading, empty or corrupted rows, and chronological scroll using synthetic data.
+2. If/when adding a chart, keep the accessible text trend. Show distinct markers for actual singles and a separate estimate series with gaps for non-qualifying sessions, never zero or interpolated points. Label each estimate and attach its original saved exercise, load, unit, rep count and session date. Add chronological and empty-state UI tests before showing it to others.
 3. Consider explicit identifiers, rep PRs, and mixed-unit entry separately. The roadmap still includes the original median-of-three formula estimate, a reps-in-reserve (RIR) input and visible formula spread; none is implemented by this provisional Epley-only slice. Chart number formatting and future bodyweight math should consume the same underlying raw records; they should not be mixed into this calculated milestone.

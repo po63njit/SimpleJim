@@ -8,7 +8,7 @@ SimpleJim is a simple Android gym log. Enter a lift, weight and reps, copy a set
 - **Copy or repeat:** copy the immediately preceding set if it is complete, or bring the previous workout into a new editable draft.
 - **Resume:** edits autosave locally as a draft, including unfinished sets. A draft does not count as a completed workout.
 - **Finish:** tap **Save Workout** to add the session to **History**. **Start Fresh** clears only the current draft.
-- **History:** review completed sessions and their exercise/set breakdown. There is no aggregate training-volume calculation yet.
+- **History:** review completed sessions and their exercise/set breakdown. Open **Strength history** for per-exercise observed loads, logged singles and a provisional estimated 1RM trend. There is no aggregate training-volume calculation yet.
 
 Cardio, PR and estimated 1RM charts, bodyweight ratios, and benchmarks are planned, not implemented. See the [roadmap](docs/roadmap.md).
 
