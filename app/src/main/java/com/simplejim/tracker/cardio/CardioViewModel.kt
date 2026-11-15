@@ -12,7 +12,7 @@ import java.util.UUID
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
-internal enum class CardioKind { TREADMILL, STAIRS }
+internal enum class CardioKind { TREADMILL, STAIRS, OUTDOOR_RUN, OUTDOOR_WALK }
 
 internal data class CardioDraft(
     val duration: String = "",
@@ -79,6 +79,12 @@ internal class CardioViewModel(application: Application) : AndroidViewModel(appl
                     )
                 }
             }
+            CardioKind.OUTDOOR_RUN, CardioKind.OUTDOOR_WALK -> when (
+                val parsed = outdoorRecord(kind, draft)
+            ) {
+                is CardioInputResult.Invalid -> return showIssues(parsed.issues)
+                is CardioInputResult.Valid -> parsed.entry
+            }
             CardioKind.STAIRS -> when (val parsed = CardioInput.stairs(draft.duration, draft.floors, draft.level)) {
                 is CardioInputResult.Invalid -> return showIssues(parsed.issues)
                 is CardioInputResult.Valid -> parsed.entry.let {
@@ -122,6 +128,22 @@ internal class CardioViewModel(application: Application) : AndroidViewModel(appl
             throw error
         } catch (_: Exception) {
             if (request == historyRequest) state = state.copy(historyUnavailable = true)
+        }
+    }
+}
+
+internal fun outdoorRecord(kind: CardioKind, draft: CardioDraft): CardioInputResult<CardioEntryEntity> {
+    require(kind == CardioKind.OUTDOOR_RUN || kind == CardioKind.OUTDOOR_WALK)
+    return when (val parsed = CardioInput.outdoor(draft.duration, draft.distance, draft.unit)) {
+        is CardioInputResult.Invalid -> parsed
+        is CardioInputResult.Valid -> parsed.entry.let {
+            CardioInputResult.Valid(
+                CardioEntryEntity(
+                    "", 0, kind.name, it.durationSeconds,
+                    distanceThousandths = it.distance.thousandths,
+                    distanceUnit = it.distance.unit.name,
+                ),
+            )
         }
     }
 }
