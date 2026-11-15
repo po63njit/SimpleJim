@@ -53,11 +53,26 @@ class CardioMigrationTest {
                     close()
                 }
             }
+            val outdoorRun = CardioEntryEntity(
+                "run", 103, "OUTDOOR_RUN", 1692, distanceThousandths = 4200, distanceUnit = "KILOMETER",
+            )
+            val outdoorWalk = CardioEntryEntity(
+                "walk", 104, "OUTDOOR_WALK", 3750, distanceThousandths = 3750, distanceUnit = "MILE",
+            )
             open(name).apply {
                 try {
                     assertEquals(listOf(stairs, treadmill), cardioDao().entries())
+                    cardioDao().insert(outdoorRun)
+                    cardioDao().insert(outdoorWalk)
                     assertEquals("synthetic draft", workoutDao().readDraft().payloadJson)
                     assertEquals(9L, workoutDao().getAllSessions().single().id)
+                } finally {
+                    close()
+                }
+            }
+            open(name).apply {
+                try {
+                    assertEquals(listOf(outdoorWalk, outdoorRun, stairs, treadmill), cardioDao().entries())
                 } finally {
                     close()
                 }

@@ -30,11 +30,17 @@ internal data class TreadmillEntry(
     val inclineThousandthsOfPercent: Long?,
 ) {
     // Average over the entire logged duration, in the same unit used in entry.
-    fun averagePaceSecondsPerEnteredUnit(): Long =
-        BigDecimal.valueOf(durationSeconds).divide(
-            BigDecimal.valueOf(distance.thousandths, 3), 0, RoundingMode.HALF_UP,
-        ).longValueExact()
+    fun averagePaceSecondsPerEnteredUnit(): Long = averagePace(durationSeconds, distance)
 }
+
+internal data class TimedDistanceEntry(val durationSeconds: Long, val distance: DisplayedDistance) {
+    fun averagePaceSecondsPerEnteredUnit(): Long = averagePace(durationSeconds, distance)
+}
+
+private fun averagePace(durationSeconds: Long, distance: DisplayedDistance): Long =
+    BigDecimal.valueOf(durationSeconds).divide(
+        BigDecimal.valueOf(distance.thousandths, 3), 0, RoundingMode.HALF_UP,
+    ).longValueExact()
 
 internal data class StairMachineEntry(
     val durationSeconds: Long,
@@ -62,6 +68,17 @@ internal object CardioInput {
         val grade = quantity(incline, CardioField.INCLINE, required = false, minimum = null, issues)
         return if (issues.isEmpty() && seconds != null && amount != null) {
             CardioInputResult.Valid(TreadmillEntry(seconds, DisplayedDistance(amount, unit), grade))
+        } else {
+            CardioInputResult.Invalid(issues)
+        }
+    }
+
+    fun outdoor(duration: String, distance: String, unit: DistanceUnit): CardioInputResult<TimedDistanceEntry> {
+        val issues = mutableListOf<CardioValidationIssue>()
+        val seconds = duration(duration, issues)
+        val amount = quantity(distance, CardioField.DISTANCE, required = true, minimum = 1, issues)
+        return if (issues.isEmpty() && seconds != null && amount != null) {
+            CardioInputResult.Valid(TimedDistanceEntry(seconds, DisplayedDistance(amount, unit)))
         } else {
             CardioInputResult.Invalid(issues)
         }

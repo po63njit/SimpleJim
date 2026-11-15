@@ -33,8 +33,8 @@ import com.simplejim.tracker.cardio.CardioState
 import com.simplejim.tracker.cardio.CardioViewModel
 import com.simplejim.tracker.cardio.DisplayedDistance
 import com.simplejim.tracker.cardio.DistanceUnit
+import com.simplejim.tracker.cardio.TimedDistanceEntry
 import com.simplejim.tracker.cardio.StairMachineEntry
-import com.simplejim.tracker.cardio.TreadmillEntry
 import com.simplejim.tracker.data.CardioEntryEntity
 import java.math.BigDecimal
 import java.text.DateFormat
@@ -77,7 +77,7 @@ internal fun CardioScreen(modifier: Modifier, viewModel: CardioViewModel) {
                 viewModel.edit { draft -> draft.copy(duration = it) }
             }
         }
-        if (state.kind == CardioKind.TREADMILL) {
+        if (state.kind != CardioKind.STAIRS) {
             item {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     DistanceUnit.entries.forEach { unit ->
@@ -93,12 +93,14 @@ internal fun CardioScreen(modifier: Modifier, viewModel: CardioViewModel) {
                     viewModel.edit { draft -> draft.copy(distance = it) }
                 }
             }
-            item {
-                CardioFieldInput(
-                    state, CardioField.INCLINE, "Incline (%) (optional)", draft.incline, KeyboardType.Text,
-                    "Use a steady grade only. Leave blank if it changed.",
-                ) {
-                    viewModel.edit { draft -> draft.copy(incline = it) }
+            if (state.kind == CardioKind.TREADMILL) {
+                item {
+                    CardioFieldInput(
+                        state, CardioField.INCLINE, "Incline (%) (optional)", draft.incline, KeyboardType.Text,
+                        "Use a steady grade only. Leave blank if it changed.",
+                    ) {
+                        viewModel.edit { draft -> draft.copy(incline = it) }
+                    }
                 }
             }
         } else {
@@ -168,14 +170,14 @@ private fun CardioFieldInput(
 private fun CardioHistoryRecord(entry: CardioEntryEntity) {
     val kind = CardioKind.entries.firstOrNull { it.name == entry.kind } ?: return
     val details = when (kind) {
-        CardioKind.TREADMILL -> {
+        CardioKind.TREADMILL, CardioKind.OUTDOOR_RUN, CardioKind.OUTDOOR_WALK -> {
             val unit = DistanceUnit.entries.firstOrNull { it.name == entry.distanceUnit } ?: return
             val distance = DisplayedDistance(entry.distanceThousandths ?: return, unit)
-            val treadmill = TreadmillEntry(entry.durationSeconds, distance, entry.inclineThousandths)
+            val timedDistance = TimedDistanceEntry(entry.durationSeconds, distance)
             listOf(
                 "${decimal(distance.thousandths)} ${unit.shortLabel()}",
-                "${clock(treadmill.averagePaceSecondsPerEnteredUnit())}/${unit.shortLabel()} average",
-                entry.inclineThousandths?.let { "${decimal(it)}% incline" },
+                "${clock(timedDistance.averagePaceSecondsPerEnteredUnit())}/${unit.shortLabel()} average",
+                entry.inclineThousandths?.takeIf { kind == CardioKind.TREADMILL }?.let { "${decimal(it)}% incline" },
             )
         }
         CardioKind.STAIRS -> {
@@ -196,7 +198,12 @@ private fun CardioHistoryRecord(entry: CardioEntryEntity) {
     }
 }
 
-private fun CardioKind.label() = if (this == CardioKind.TREADMILL) "Treadmill" else "Stair machine"
+private fun CardioKind.label() = when (this) {
+    CardioKind.TREADMILL -> "Treadmill"
+    CardioKind.STAIRS -> "Stair machine"
+    CardioKind.OUTDOOR_RUN -> "Outdoor run"
+    CardioKind.OUTDOOR_WALK -> "Outdoor walk"
+}
 private fun DistanceUnit.shortLabel() = if (this == DistanceUnit.MILE) "mi" else "km"
 private fun decimal(value: Long) = BigDecimal.valueOf(value, 3).stripTrailingZeros().toPlainString()
 private fun clock(seconds: Long): String =
