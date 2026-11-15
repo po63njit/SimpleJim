@@ -12,7 +12,10 @@ import com.simplejim.tracker.data.DraftRevisionConflict
 import com.simplejim.tracker.data.WorkoutExercise
 import com.simplejim.tracker.data.WorkoutRepository
 import com.simplejim.tracker.data.WorkoutSession
+import com.simplejim.tracker.strength.ExerciseStrengthHistory
+import com.simplejim.tracker.strength.StrengthSnapshotGate
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
 
@@ -50,9 +53,29 @@ data class SimpleJimUiState(
     val quickPresets: List<String> = DEFAULT_PRESET_EXERCISES,
 )
 
+internal data class StrengthHistoryState(
+    val isOpen: Boolean = false,
+    val isLoading: Boolean = false,
+    val failedToLoad: Boolean = false,
+    val exercises: Map<String, ExerciseStrengthHistory> = emptyMap(),
+    val selectedKey: String? = null,
+) {
+    fun withLoadedExercises(profiles: Map<String, ExerciseStrengthHistory>) = copy(
+        isLoading = false,
+        failedToLoad = false,
+        exercises = profiles,
+        selectedKey = selectedKey?.takeIf(profiles::containsKey),
+    )
+}
+
 class SimpleJimViewModel(application: Application) : AndroidViewModel(application) {
     private var idCounter = 1L
     private val repository = WorkoutRepository(application)
+    internal var strengthHistory by mutableStateOf(StrengthHistoryState())
+        private set
+    private var strengthLoadJob: Job? = null
+    private val strengthSnapshotGate = StrengthSnapshotGate()
+
     private var draftRevision: Long? = null
     private val draftCommands = Channel<DraftCommand>(Channel.UNLIMITED)
 
@@ -129,6 +152,10 @@ class SimpleJimViewModel(application: Application) : AndroidViewModel(applicatio
                     if (command is DraftCommand.Persist) {
                         uiState = uiState.copy(pendingDraftWrites = uiState.pendingDraftWrites - 1)
                     }
+                    if (command is DraftCommand.Save) {
+                        strengthSnapshotGate.finishWorkoutSave()
+                        reloadStrengthHistory()
+                    }
                 }
             }
         }
@@ -172,7 +199,52 @@ class SimpleJimViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     fun selectTab(tab: SimpleJimTab) {
+        if (tab != SimpleJimTab.History) closeStrengthHistory()
         uiState = uiState.copy(selectedTab = tab)
+    }
+
+    fun openStrengthHistory() {
+        strengthHistory = StrengthHistoryState(isOpen = true)
+        reloadStrengthHistory()
+    }
+
+    fun reloadStrengthHistory() {
+        if (!strengthHistory.isOpen) return
+        strengthLoadJob?.cancel()
+        strengthLoadJob = null
+        strengthHistory = strengthHistory.copy(isLoading = true, failedToLoad = false)
+        val ticket = strengthSnapshotGate.beginLoad() ?: return
+        strengthLoadJob = viewModelScope.launch {
+            try {
+                val profiles = repository.loadStrengthHistory()
+                if (strengthSnapshotGate.isCurrent(ticket)) {
+                    strengthHistory = strengthHistory.withLoadedExercises(profiles)
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                if (strengthSnapshotGate.isCurrent(ticket)) {
+                    strengthHistory = strengthHistory.copy(isLoading = false, failedToLoad = true)
+                }
+            }
+        }
+    }
+
+    fun selectStrengthExercise(key: String) {
+        if (key in strengthHistory.exercises) strengthHistory = strengthHistory.copy(selectedKey = key)
+    }
+
+    fun goBackFromStrengthHistory() {
+        if (strengthHistory.selectedKey != null) {
+            strengthHistory = strengthHistory.copy(selectedKey = null)
+        } else closeStrengthHistory()
+    }
+
+    private fun closeStrengthHistory() {
+        strengthSnapshotGate.invalidate()
+        strengthLoadJob?.cancel()
+        strengthLoadJob = null
+        strengthHistory = StrengthHistoryState()
     }
 
     fun updateNotes(notes: String) {
@@ -340,6 +412,8 @@ class SimpleJimViewModel(application: Application) : AndroidViewModel(applicatio
             exercises = cleanedExercises,
         )
         uiState = uiState.copy(draftBusy = true, draftStorageError = null, validationMessage = null)
+        strengthSnapshotGate.beginWorkoutSave()
+        reloadStrengthHistory()
         draftCommands.trySend(DraftCommand.Save(session))
     }
 

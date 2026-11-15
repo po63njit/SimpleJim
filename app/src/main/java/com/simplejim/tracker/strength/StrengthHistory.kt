@@ -6,7 +6,12 @@ import org.json.JSONException
 
 internal enum class LoadUnit {
     Pounds,
-    Kilograms,
+    Kilograms;
+
+    fun fromKilograms(value: Double): Double = when (this) {
+        Pounds -> value / KILOGRAMS_PER_POUND
+        Kilograms -> value
+    }
 }
 
 internal data class EnteredLoad(val value: Double, val unit: LoadUnit) {
