@@ -15,7 +15,7 @@ Example: enter `95` lb and `8` reps for a squat. Tap **Copy last set**, then cha
 
 Dismiss the keyboard to reveal the **Save Workout** bar and tap it when finished. A workout needs at least one named exercise with a valid set. The current app saves the valid named exercises and sets and omits incomplete rows. If you meant to keep working on incomplete rows, leave the draft unsubmitted instead.
 
-History opens after database confirmation. It displays the saved exercises and sets in the session; it does not recalculate your workout into a score, estimated 1RM, or aggregate training volume.
+History opens after database confirmation. Session cards display the recorded exercises and sets without recalculating them. Open [Strength history](strength-history.md) for per-exercise heaviest sets, logged singles and separate provisional estimates. There is no aggregate training-volume calculation.
 
 ## Pause and resume
 

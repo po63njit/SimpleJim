@@ -7,6 +7,7 @@
 | Understand Room, draft ordering, migration, or privacy | [Architecture and data](architecture-and-data.md) |
 | Run checks or decide what remains unverified | [Testing and evidence](testing.md) |
 | Rehearse an in-place upgrade with synthetic data | [Android smoke and migration protocol](android-smoke.md) |
+| Read per-exercise strength history and understand estimates | [Strength history calculations](strength-history.md) |
 | See what is intentionally not shipped | [Roadmap](roadmap.md) |
 
 ## Keep this documentation accurate
